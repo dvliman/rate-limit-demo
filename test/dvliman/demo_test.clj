@@ -20,6 +20,7 @@
   (testing "2 requests (same IP) with capacity of 1, 1 should be rejected"
     (let [router (make-test-router default-options)]
       (is (= 200 (:status (-> (mock/request :post "/login") router))))
+      (Thread/sleep 1)
       (is (= 429 (:status (-> (mock/request :post "/login") router)))))))
 
 (deftest reset-after-interval-window
@@ -30,9 +31,16 @@
       (is (= 200 (:status (-> (mock/request :post "/login") router)))))))
 
 (deftest capacity-per-ip-address
-  (testing "2 requests different IP addresses with capacity of 1, should be ok"
+  (testing "2 requests (different IP) with capacity of 1, should be ok"
     (let [router (make-test-router default-options)
           req1 (-> (mock/request :post "/login") (assoc :remote-addr "47.151.244.186"))
           req2 (-> (mock/request :post "/login") (assoc :remote-addr "47.151.244.187"))]
       (is (= 200 (:status (-> req1 router))))
       (is (= 200 (:status (-> req2 router)))))))
+
+(deftest middleware-for-all-urls
+  (testing "rate limit middleware applies to all urls"
+    (let [router (make-test-router default-options)]
+      (is (= 200 (:status (-> (mock/request :post "/login") router))))
+      (Thread/sleep 1)
+      (is (= 429 (:status (-> (mock/request :get "/health") router)))))))
