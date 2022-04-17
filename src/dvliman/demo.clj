@@ -2,36 +2,30 @@
   (:require [reitit.ring :as ring]
             [ring.util.response :as response]))
 
-(defn update-queue [queue new-bucket new-timestamp capacity interval-ms]
-  (let [pruned-queue
-        (loop [q queue]
-          (if-let [{:keys [timestamp]} (first q)]
-            (if (<= timestamp (- new-timestamp interval-ms))
-              (do (prn "deleting")
-                (recur (pop q)))
-              q)
-            q))]
-    (if (>= (count pruned-queue) capacity)
-      (do (prn "hitting capacity" (count pruned-queue))
-          pruned-queue)
-      (conj pruned-queue {:bucket new-bucket
-                          :timestamp new-timestamp}))))
-
-(def ^:dynamic *queue* (atom (clojure.lang.PersistentQueue/EMPTY)))
+(defn update-state [state bucket timestamp capacity interval-ms]
+  (if-let [requests-queue (get state bucket)]
+    (let [pruned-queue (loop [q requests-queue]
+                         (if-let [old-timestamp (first q)]
+                           (if (<= old-timestamp (- timestamp interval-ms))
+                             (recur (pop q))
+                             q)
+                           q))]
+      (if (>= (count pruned-queue) capacity)
+        (assoc state bucket pruned-queue)
+        (assoc state bucket (conj pruned-queue timestamp))))
+    (assoc state bucket (conj (clojure.lang.PersistentQueue/EMPTY) timestamp))))
 
 (defn create-rate-limit-middleware [{:keys [capacity interval-ms bucket-fn]}]
-  (fn [handler]
-    (fn [request]
-      (let [;;bucket (bucket-fn request)
-            bucket (str (System/currentTimeMillis))
-            now (System/currentTimeMillis)
-            _ (prn (seq @*queue*))
-            new-queue (swap! *queue*
-                             #(update-queue % bucket now capacity interval-ms))
-            _ (prn "last" (last new-queue))]
-        (if (not= bucket (:bucket (last new-queue)))
-          {:status 429 :body {:error :exceeded-rate-limit}}
-          (handler request))))))
+  (let [state (atom {})]
+    (fn [handler]
+      (fn [request]
+        (let [bucket (bucket-fn request)
+              now (System/currentTimeMillis)
+              new-state (swap! state
+                               #(update-state % bucket now capacity interval-ms))]
+          (if (not= now (last (get new-state bucket)))
+            {:status 429 :body {:error :exceeded-rate-limit}}
+            (handler request)))))))
 
 (defn routes []
   [["/login"
