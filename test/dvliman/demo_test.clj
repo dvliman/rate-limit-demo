@@ -9,7 +9,7 @@
    (ring/router
     (demo/routes)
     {:data
-     {:middleware [(demo/create-rate-limit-middleware options)]}})))
+     {:middleware [(demo/wrap-rate-limit options)]}})))
 
 (def default-options
   {:capacity 1

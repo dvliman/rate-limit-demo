@@ -15,7 +15,7 @@
         (assoc state bucket (conj pruned-queue timestamp))))
     (assoc state bucket (conj (clojure.lang.PersistentQueue/EMPTY) timestamp))))
 
-(defn create-rate-limit-middleware [{:keys [capacity interval-ms bucket-fn]}]
+(defn wrap-rate-limit [{:keys [capacity interval-ms bucket-fn]}]
   (let [state (atom {})]
     (fn [handler]
       (fn [request]
@@ -50,4 +50,4 @@
     (routes)
     {:data
      {:middleware
-      [(create-rate-limit-middleware rate-limit-option)]}})))
+      [(wrap-rate-limit rate-limit-option)]}})))
